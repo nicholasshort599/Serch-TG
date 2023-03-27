@@ -1,0 +1,60 @@
+import telegram
+from telegram.ext import Updater, MessageHandler, Filters
+import requests
+import json
+
+# Replace YOUR_API_KEY with the API key from your image recognition service
+api_key = 'YOUR_API_KEY'
+
+# Create a Telegram bot object
+bot = telegram.Bot(token='YOUR_TELEGRAM_BOT_TOKEN')
+
+# Define a function to handle incoming messages
+def handle_message(update, context):
+    message = update.message
+    chat_id = message.chat_id
+    
+    # Check if the message contains an image
+    if message.photo:
+        # Get the image file ID
+        file_id = message.photo[-1].file_id
+        
+        # Download the image file
+        file = bot.get_file(file_id)
+        file_url = file.file_path
+        response = requests.get(file_url)
+        image_data = response.content
+        
+        # Use the image recognition API to extract information
+        # Replace image_data with your actual image data
+        api_url = 'https://vision.googleapis.com/v1/images:annotate?key=' + api_key
+        data = {
+            'requests': [
+                {
+                    'image': {
+                        'content': image_data
+                    },
+                    'features': [
+                        {
+                            'type': 'LABEL_DETECTION',
+                            'maxResults': 10
+                        }
+                    ]
+                }
+            ]
+        }
+        response = requests.post(api_url, json=data)
+        response_data = json.loads(response.text)
+        labels = [annotation['description'] for annotation in response_data['responses'][0]['labelAnnotations']]
+        message_text = 'I see the following labels in this image:\n' + '\n'.join(labels)
+    else:
+        message_text = 'Please send me an image.'
+    
+    # Send the extracted information back to the user
+    bot.send_message(chat_id=chat_id, text=message_text)
+
+# Set up the Telegram bot with the message handler
+updater = Updater(token='YOUR_TELEGRAM_BOT_TOKEN', use_context=True)
+updater.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+updater.start_polling()
+updater.idle()
